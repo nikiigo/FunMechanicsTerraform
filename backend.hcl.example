@@ -1,0 +1,5 @@
+bucket       = "funmechanics-terraform-state-180940737694"
+key          = "prod/funmechanics.tfstate"
+region       = "eu-north-1"
+use_lockfile = true
+encrypt      = true

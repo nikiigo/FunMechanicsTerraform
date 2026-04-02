@@ -1,0 +1,12 @@
+aws_region          = "eu-north-1"
+availability_zone   = "eu-north-1a"
+instance_type       = "t4g.small"
+root_volume_size    = 20
+allowed_https_cidrs = ["0.0.0.0/0"]
+allowed_https_ipv6_cidrs = ["::/0"]
+site_repo_branch    = "main"
+project_name        = "example"
+route53_zone_id     = "ZFSDADSSHSJWKWKEXAMPLE"
+domain_name         = "example.net"
+site_repo_url       = "https://github.com/nikiigo/example.git"
+site_name           = "example"

@@ -1,0 +1,180 @@
+#!/bin/bash
+set -euo pipefail
+
+exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+echo "[INFO] Starting bootstrap"
+
+dnf update -y
+dnf install -y golang git tar
+
+if ! getent group caddy >/dev/null; then
+  groupadd --system caddy
+fi
+
+if ! id caddy >/dev/null 2>&1; then
+  useradd --system \
+    --gid caddy \
+    --create-home \
+    --home-dir /var/lib/caddy \
+    --shell /sbin/nologin \
+    --comment "Caddy web server" \
+    caddy
+fi
+
+mkdir -p /etc/caddy ${site_root}
+chown root:caddy /etc/caddy
+chmod 750 /etc/caddy
+chown -R caddy:caddy ${site_root}
+
+export HOME=/root
+export GOPATH=/root/go
+export GOMODCACHE=/root/go/pkg/mod
+export GOTOOLCHAIN=auto
+export GOSUMDB=sum.golang.org
+export GOPROXY=https://proxy.golang.org,direct
+export GOPRIVATE=
+export GONOPROXY=
+export GONOSUMDB=
+export PATH="$PATH:$${GOPATH}/bin"
+go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+go install github.com/9seconds/mtg/v2@latest
+cd /root
+/root/go/bin/xcaddy build --with github.com/caddy-dns/route53@latest
+install -m 755 /root/caddy /usr/local/bin/caddy
+install -m 755 /root/go/bin/mtg /usr/local/bin/mtg
+
+sudo -u caddy git clone --branch ${site_repo_branch} ${site_repo_url} ${site_root}
+
+cat >/etc/caddy/Caddyfile <<EOF
+{
+	acme_dns route53 {
+		hosted_zone_id ${route53_zone_id}
+	}
+}
+
+${domain_name}:8443 {
+	bind 127.0.0.1
+	root * ${site_root}
+	file_server browse
+}
+EOF
+
+cat >/etc/systemd/system/caddy.service <<'EOF'
+[Unit]
+Description=Caddy Web Server
+Documentation=https://caddyserver.com/docs/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=caddy
+Group=caddy
+ExecStart=/usr/local/bin/caddy run --environ --config /etc/caddy/Caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile
+TimeoutStopSec=5s
+LimitNOFILE=1048576
+LimitNPROC=512
+PrivateTmp=true
+ProtectSystem=full
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now caddy
+
+echo "[INFO] Starting MTG setup"
+
+mkdir -p /etc/mtg
+
+MTG_SECRET="$(/usr/local/bin/mtg generate-secret --hex ${domain_name})"
+chmod 755 /etc/mtg
+
+IMDS_TOKEN="$(curl -fsS -X PUT 'http://169.254.169.254/latest/api/token' -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600')"
+PRIVATE_IPV4="$(curl -fsS -H "X-aws-ec2-metadata-token: $${IMDS_TOKEN}" http://169.254.169.254/latest/meta-data/local-ipv4)"
+PUBLIC_IPV4="$(curl -fsS -H "X-aws-ec2-metadata-token: $${IMDS_TOKEN}" http://169.254.169.254/latest/meta-data/public-ipv4 || true)"
+PUBLIC_IPV6="$(curl -fsS -H "X-aws-ec2-metadata-token: $${IMDS_TOKEN}" http://169.254.169.254/latest/meta-data/ipv6 || true)"
+
+cat >/etc/mtg.toml <<EOF
+secret = "$${MTG_SECRET}"
+bind-to = "$${PRIVATE_IPV4}:443"
+concurrency = 8192
+prefer-ip = "only-ipv4"
+tolerate-time-skewness = "5s"
+allow-fallback-on-unknown-dc = false
+$(if [ -n "$${PUBLIC_IPV4}" ]; then echo "public-ipv4 = \"$${PUBLIC_IPV4}\""; fi)
+
+[domain-fronting]
+port = 8443
+proxy-protocol = false
+ip = "127.0.0.1"
+
+[network]
+dns = "https://1.1.1.1"
+
+[defense.doppelganger]
+urls = [
+    "https://caddyserver.com/docs/architecture/",
+    "https://caddyserver.com/resources/css/common.css",
+    "https://caddyserver.com/resources/images/nostalgia/caddy.png"
+]
+repeats-per-raid = 10
+raid-each = "6h"
+enabled = true
+max-size = "4mib"
+action = "proxy"
+threshold = 5
+drs = true
+
+[defense.anti-replay]
+enabled = true
+max-size = "4mib"
+error-rate = 0.001
+
+[defense.blocklist]
+enabled = true
+download-concurrency = 2
+urls = ["https://iplists.firehol.org/files/firehol_level1.netset"]
+update-each = "24h"
+
+[defense.allowlist]
+# You can enable/disable this feature.
+enabled = false
+
+[stats.prometheus]
+enabled = true
+bind-to = "127.0.0.1:3129"
+http-path = "/"
+metric-prefix = "mtg"
+EOF
+
+cat >/etc/systemd/system/mtg.service <<'EOF'
+[Unit]
+Description=mtg - MTProto proxy server
+Documentation=https://github.com/9seconds/mtg
+After=network.target
+Wants=network.target
+
+[Service]
+ExecStart=/usr/local/bin/mtg run /etc/mtg.toml
+Restart=always
+RestartSec=3
+DynamicUser=true
+LimitNOFILE=65536
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now mtg
+sleep 2
+systemctl --no-pager --full status mtg || true
+echo "[INFO] MTG access data:"
+/usr/local/bin/mtg access /etc/mtg.toml || true
+echo "[INFO] MTG setup complete"
