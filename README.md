@@ -11,6 +11,7 @@ It provisions:
   - Elastic IP-backed public IPv4
   - public IPv6
   - encrypted `gp3` root volume sized by `root_volume_size`
+  - intended to be accessed only through AWS Systems Manager Session Manager, not SSH
 - an instance profile with:
   - `AmazonSSMManagedInstanceCore`
   - Route53 permissions for ACME DNS challenge
@@ -43,6 +44,15 @@ Verify both commands are available:
 terraform version
 aws --version
 ```
+
+Session Manager access to EC2 instances should already be available in the AWS account before creating this infrastructure. The expected operational model for this instance is access through SSM sessions only.
+
+To enable Session Manager access before provisioning:
+
+1. Ensure the AWS identity you will use for administration can start SSM sessions, for example with permissions covering `ssm:StartSession`, `ssm:ResumeSession`, `ssm:TerminateSession`, and `ec2:DescribeInstances`.
+2. Install the Session Manager plugin on the machine where you will run `aws ssm start-session`.
+3. Verify that the target instance will have the `AmazonSSMManagedInstanceCore` policy attached through its instance profile. This Terraform project already does that.
+4. Verify your AWS CLI login works in the target account and region with `aws sts get-caller-identity`.
 
 ## AWS Setup
 
@@ -101,6 +111,12 @@ Then initialize and apply:
 terraform init -backend-config=backend.hcl
 terraform plan
 terraform apply
+```
+
+To open a shell on the created instance through Session Manager, use the instance ID from the EC2 console or `terraform output` and run:
+
+```bash
+aws ssm start-session --target i-0123456789abcdef0
 ```
 
 ## Remote State
