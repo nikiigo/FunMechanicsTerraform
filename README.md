@@ -17,7 +17,7 @@ It provisions:
 - a security group exposing MTG on `443` and the website on `8443` for IPv4 and IPv6
 - a managed Elastic IP for stable public IPv4
 - a Route53 `A` record for the configured `domain_name`
-- EC2 user data that installs Caddy with the Route53 plugin, clones the site from GitHub, generates `/etc/caddy/Caddyfile`, and installs `mtg`
+- EC2 user data that installs Caddy with the Route53 plugin, clones the site from GitHub, generates `/etc/caddy/Caddyfile`, and installs and configures [`mtg`](https://github.com/9seconds/mtg)
 
 ## Files
 
