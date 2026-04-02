@@ -30,6 +30,57 @@ It provisions:
 - `terraform.tfvars.example`: example input values
 - `backend.hcl.example`: example S3 backend configuration for Terraform state
 
+## Prerequisites
+
+Before using this project, install the following tools on the machine that will run Terraform:
+
+- Terraform
+- AWS CLI
+
+Verify both commands are available:
+
+```bash
+terraform version
+aws --version
+```
+
+## AWS Setup
+
+Prepare an AWS account and credentials before running Terraform:
+
+1. Create or use an AWS account that owns the target infrastructure and domain DNS records.
+2. Create an IAM user for Terraform automation with AdministratorAccess, or an equivalent permission set that covers EC2, IAM, VPC, Route53, and S3 state access.
+3. Create an access key pair for that IAM user and store the access key ID and secret access key securely.
+4. Configure the AWS CLI with those credentials:
+
+```bash
+aws configure
+```
+
+Provide:
+
+- AWS Access Key ID
+- AWS Secret Access Key
+- default region, for example `eu-north-1`
+- default output format, for example `json`
+
+Confirm the CLI is authenticated:
+
+```bash
+aws sts get-caller-identity
+```
+
+## Route53 Setup
+
+The domain used by `domain_name` should be managed by a public Route53 hosted zone:
+
+1. Register the domain with your registrar, or use an existing registered domain.
+2. Create a public hosted zone in Route53 for that domain.
+3. Update the registrar nameservers so the domain delegates DNS to the Route53 hosted zone.
+4. Put the hosted zone ID into `route53_zone_id` and the domain into `domain_name`.
+
+Terraform creates DNS records in that hosted zone, so the zone must already exist before `terraform apply`.
+
 ## Usage
 
 Copy the example variables file and adjust values:
