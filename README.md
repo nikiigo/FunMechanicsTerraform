@@ -37,6 +37,7 @@ Before using this project, install the following tools on the machine that will 
 - [Terraform](https://developer.hashicorp.com/terraform/install)
 - [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 - [AWS Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
+- a GitHub repository with a static website that will be used as the MTG fronting domain
 
 Verify both commands are available:
 
@@ -82,6 +83,29 @@ The domain used by `domain_name` should be managed by a public Route53 hosted zo
 
 Terraform creates DNS records in that hosted zone, so the zone must already exist before `terraform apply`.
 
+## Remote State
+
+This project is configured to use the S3 backend for Terraform state.
+
+Example backend config:
+
+```hcl
+bucket         = "funmechanics-terraform-state-180940737694"
+key            = "prod/funmechanics.tfstate"
+region         = "eu-north-1"
+use_lockfile   = true
+encrypt        = true
+```
+
+Recommended bucket settings:
+
+- enable bucket versioning
+- enable default SSE-S3 or SSE-KMS encryption
+- block all public access
+- keep the bucket dedicated to Terraform state
+
+Create the bucket before running `terraform init`.
+
 ## Usage
 
 Copy the example variables file and adjust values:
@@ -109,29 +133,6 @@ To start an SSM session to the created instance, use the instance ID from the EC
 ```bash
 aws ssm start-session --target i-0123456789abcdef0
 ```
-
-## Remote State
-
-This project is configured to use the S3 backend for Terraform state.
-
-Example backend config:
-
-```hcl
-bucket         = "funmechanics-terraform-state-180940737694"
-key            = "prod/funmechanics.tfstate"
-region         = "eu-north-1"
-use_lockfile   = true
-encrypt        = true
-```
-
-Recommended bucket settings:
-
-- enable bucket versioning
-- enable default SSE-S3 or SSE-KMS encryption
-- block all public access
-- keep the bucket dedicated to Terraform state
-
-Create the bucket before running `terraform init`.
 
 ## Notes
 
