@@ -1,6 +1,6 @@
 # FunMechanicsTerraform
 
-Terraform project for the Fun Mechanics website infrastructure on AWS.
+Terraform project for the Automated AWS MTProto v2 (MTG) Proxy Deployment.
 
 It provisions:
 
