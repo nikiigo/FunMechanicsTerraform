@@ -4,6 +4,7 @@ set -euo pipefail
 exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
 
 echo "[INFO] Starting bootstrap"
+cd /root
 
 dnf update -y
 dnf install -y golang git tar
@@ -39,7 +40,6 @@ export GONOSUMDB=
 export PATH="$PATH:$${GOPATH}/bin"
 go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
 go install github.com/9seconds/mtg/v2@latest
-cd /root
 /root/go/bin/xcaddy build --with github.com/caddy-dns/route53@latest
 install -m 755 /root/caddy /usr/local/bin/caddy
 install -m 755 /root/go/bin/mtg /usr/local/bin/mtg
@@ -150,6 +150,15 @@ enabled = true
 bind-to = "127.0.0.1:3129"
 http-path = "/"
 metric-prefix = "mtg"
+
+[network.keep-alive]
+disabled = false
+# idle means a time period after which we start sending TCP Keep Alive probes
+idle = "15s"
+# interval is a period between 2 consecutive probes
+interval = "15s"
+# if we miss that many probes, a connection will be considered as a dead one.
+count = 9
 EOF
 
 cat >/etc/systemd/system/mtg.service <<'EOF'
